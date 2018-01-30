@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.DirectoryServices;
+using System.IO;
 using System.Linq;
 using System.Management;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Windows.Forms;
 
 namespace SystemSpecsScraper
@@ -50,12 +50,8 @@ namespace SystemSpecsScraper
             OutputTable.Columns.Add("Date", "Date");
             OutputTable.Columns.Add("Host", "Host");
             foreach (WMI_Class wmiOBJ in WMI_Classes)
-            {
                 foreach (KeyValuePair<string, string> property in wmiOBJ.properties)
-                {
                     OutputTable.Columns.Add(property.Key, property.Key);
-                }
-            }
         }
 
         public Form1()
@@ -100,19 +96,24 @@ namespace SystemSpecsScraper
 
         private void GetSpecsBTN_Click(object sender, EventArgs e)
         {
-            new Thread(() =>
+            if (!HostNamesList.Text.Equals(""))
             {
-                Thread.CurrentThread.IsBackground = true;
                 GetSpecsBTN.Enabled = HostNamesList.Enabled = FailedComputersList.Enabled = ClearTableBTN.Enabled = CopyTableBTN.Enabled = ReadHostsBTN.Enabled = false;
                 GetSpecs();
-                GetSpecsBTN.Enabled = HostNamesList.Enabled = FailedComputersList.Enabled = ClearTableBTN.Enabled = CopyTableBTN.Enabled = ReadHostsBTN.Enabled = true;
-            }).Start();
+                MessageBox.Show("Done reading specs!");
+                GetSpecsBTN.Enabled = HostNamesList.Enabled = FailedComputersList.Enabled = ClearTableBTN.Enabled = CopyTableBTN.Enabled = true;
+                ReadHostsBTN.Enabled = !domain.Equals("");
+            }
+            else
+                MessageBox.Show("Please enter hostnames before reading specs...");
         }
 
         private void GetSpecs()
         {
             progressBar1.Value = 0;
-            string[] computerNames = Regex.Replace(HostNamesList.Text, @"^\s+$[\r\n]*", "", RegexOptions.Multiline).Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);//Remove empty lines
+            HostNamesList.Lines = Regex.Replace(HostNamesList.Text, @"^\s+$[\r\n]*", "", RegexOptions.Multiline).Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);//Remove empty lines
+            HostNamesList.Text = HostNamesList.Text.Replace(" ","");
+            string[] computerNames = HostNamesList.Lines;
             progressBar1.Maximum = computerNames.Count();
             foreach (string computerName in computerNames)
             {
@@ -124,7 +125,6 @@ namespace SystemSpecsScraper
                     {
                         ManagementObjectSearcher searcher = new ManagementObjectSearcher("\\\\" + computerName + "\\root\\CIMV2", "SELECT * FROM " + wmiClass.name);
                         foreach (ManagementObject queryObj in searcher.Get())
-                        {
                             foreach (KeyValuePair<string, string> property in wmiClass.properties)
                             {
                                 if (property.Key.Equals("RAM"))
@@ -132,7 +132,6 @@ namespace SystemSpecsScraper
                                 else
                                     row.Cells[property.Key].Value = queryObj[property.Value].ToString();
                             }
-                        }
                     }
                     row.Cells["Date"].Value = DateTime.Now;
                     row.Cells["Host"].Value = computerName;
@@ -143,19 +142,47 @@ namespace SystemSpecsScraper
                         FailedComputersList.AppendText(computerName + Environment.NewLine);
                 }
                 if (row.Cells[0].Value == null)
-                    OutputTable.Rows.RemoveAt(OutputTable.Rows.Count - 1);
+                    OutputTable.Rows.RemoveAt(OutputTable.Rows.Count - 1);//Remove empty rows from the table
+                if (computerName.Length != 0)
+                    HostNamesList.Text = HostNamesList.Text.Replace(computerName, "");//Remove the computer name from hosts list
+                HostNamesList.Lines = Regex.Replace(HostNamesList.Text, @"^\s+$[\r\n]*", "", RegexOptions.Multiline).Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);//Remove empty lines
             }
         }
 
         private void ExportTableBTN_Click(object sender, EventArgs e)
         {
-            OutputTable.SelectAll();
-            Clipboard.SetDataObject(OutputTable.GetClipboardContent());
+            try
+            {
+                OutputTable.SelectAll();
+                Clipboard.SetDataObject(OutputTable.GetClipboardContent());
+                MessageBox.Show("Copied to clipboard");
+            }
+            catch (Exception)
+            {
+                MessageBox.Show("Cannot copy the table because it is empty...");
+            }
         }
 
         private void ClearTableBTN_Click(object sender, EventArgs e)
         {
-            OutputTable.Rows.Clear();
+            DialogResult dialogResult = MessageBox.Show("Are you sure you want to clear the table?", "Warning", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (dialogResult == DialogResult.Yes)
+                OutputTable.Rows.Clear();
+        }
+
+        private void ExportTablesBTN_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                OutputTable.SelectAll();
+                File.WriteAllText("Specs.txt", OutputTable.GetClipboardContent().GetText());
+                File.WriteAllText("Failed Computers.txt", FailedComputersList.Text);
+                MessageBox.Show("System specs table and failed computers list were saved to " + Environment.CurrentDirectory);
+            }
+            catch (Exception)
+            {
+                MessageBox.Show("The table is empty...");
+            }
         }
     }
 }
