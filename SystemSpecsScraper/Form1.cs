@@ -98,10 +98,10 @@ namespace SystemSpecsScraper
         {
             if (!HostNamesList.Text.Equals(""))
             {
-                GetSpecsBTN.Enabled = HostNamesList.Enabled = FailedComputersList.Enabled = ClearTableBTN.Enabled = CopyTableBTN.Enabled = ReadHostsBTN.Enabled = false;
+                GetSpecsBTN.Enabled = HostNamesList.Enabled = FailedComputersList.Enabled = ClearTableBTN.Enabled = CopyTableBTN.Enabled = ReadHostsBTN.Enabled = ExportTablesBTN.Enabled = false;
                 GetSpecs();
                 MessageBox.Show("Done reading specs!");
-                GetSpecsBTN.Enabled = HostNamesList.Enabled = FailedComputersList.Enabled = ClearTableBTN.Enabled = CopyTableBTN.Enabled = true;
+                GetSpecsBTN.Enabled = HostNamesList.Enabled = FailedComputersList.Enabled = ClearTableBTN.Enabled = CopyTableBTN.Enabled = ExportTablesBTN.Enabled = true;
                 ReadHostsBTN.Enabled = !domain.Equals("");
             }
             else
@@ -112,7 +112,7 @@ namespace SystemSpecsScraper
         {
             progressBar1.Value = 0;
             HostNamesList.Lines = Regex.Replace(HostNamesList.Text, @"^\s+$[\r\n]*", "", RegexOptions.Multiline).Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);//Remove empty lines
-            HostNamesList.Text = HostNamesList.Text.Replace(" ","");
+            HostNamesList.Text = HostNamesList.Text.Replace(" ", "");
             string[] computerNames = HostNamesList.Lines;
             progressBar1.Maximum = computerNames.Count();
             foreach (string computerName in computerNames)
@@ -172,17 +172,30 @@ namespace SystemSpecsScraper
 
         private void ExportTablesBTN_Click(object sender, EventArgs e)
         {
+            if (File.Exists("Specs.txt") || File.Exists("Failed Computers.txt"))
+            {
+                DialogResult dialogResult = MessageBox.Show("Do you want to overwrite these files?", "These files already exist...", MessageBoxButtons.YesNo);
+                if (dialogResult == DialogResult.Yes)
+                    ExportTables();
+            }
+            else
+                ExportTables();
+        }
+
+        private void ExportTables()
+        {
+            if (!FailedComputersList.Text.Equals(""))
+                File.WriteAllLines("Failed Computers.txt", FailedComputersList.Lines);
             try
             {
                 OutputTable.SelectAll();
                 File.WriteAllText("Specs.txt", OutputTable.GetClipboardContent().GetText());
-                File.WriteAllText("Failed Computers.txt", FailedComputersList.Text);
-                MessageBox.Show("System specs table and failed computers list were saved to " + Environment.CurrentDirectory);
             }
             catch (Exception)
             {
                 MessageBox.Show("The table is empty...");
             }
+            MessageBox.Show("System specs table and/or failed computers list were saved to " + Environment.CurrentDirectory, "Export Successful");
         }
     }
 }

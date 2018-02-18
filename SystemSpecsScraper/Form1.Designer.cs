@@ -40,6 +40,7 @@
             this.progressBar1 = new System.Windows.Forms.ProgressBar();
             this.ExportTablesBTN = new System.Windows.Forms.Button();
             this.copyrightLBL = new System.Windows.Forms.Label();
+            this.VersionLBL = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.OutputTable)).BeginInit();
             this.SuspendLayout();
             // 
@@ -170,17 +171,29 @@
             // 
             this.copyrightLBL.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.copyrightLBL.AutoSize = true;
-            this.copyrightLBL.Location = new System.Drawing.Point(97, 239);
+            this.copyrightLBL.Font = new System.Drawing.Font("Calibri", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.copyrightLBL.Location = new System.Drawing.Point(83, 239);
             this.copyrightLBL.Name = "copyrightLBL";
-            this.copyrightLBL.Size = new System.Drawing.Size(196, 13);
+            this.copyrightLBL.Size = new System.Drawing.Size(188, 13);
             this.copyrightLBL.TabIndex = 10;
             this.copyrightLBL.Text = "Created by Yonatan Mankovich © 2018";
+            // 
+            // VersionLBL
+            // 
+            this.VersionLBL.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.VersionLBL.AutoSize = true;
+            this.VersionLBL.Location = new System.Drawing.Point(286, 238);
+            this.VersionLBL.Name = "VersionLBL";
+            this.VersionLBL.Size = new System.Drawing.Size(28, 13);
+            this.VersionLBL.TabIndex = 11;
+            this.VersionLBL.Text = "v2.1";
             // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(984, 261);
+            this.Controls.Add(this.VersionLBL);
             this.Controls.Add(this.copyrightLBL);
             this.Controls.Add(this.ExportTablesBTN);
             this.Controls.Add(this.progressBar1);
@@ -193,6 +206,7 @@
             this.Controls.Add(this.ReadHostsBTN);
             this.Controls.Add(this.HostNamesList);
             this.Controls.Add(this.OutputTable);
+            this.MinimumSize = new System.Drawing.Size(500, 200);
             this.Name = "Form1";
             this.Text = "System Specs Scraper";
             this.Load += new System.EventHandler(this.Form1_Load);
@@ -216,6 +230,7 @@
         private System.Windows.Forms.ProgressBar progressBar1;
         private System.Windows.Forms.Button ExportTablesBTN;
         private System.Windows.Forms.Label copyrightLBL;
+        private System.Windows.Forms.Label VersionLBL;
     }
 }
 
