@@ -59,9 +59,8 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="WMI_Class.cs" />
-    <Compile Include="WMI_ClassesLoader.cs" />
-    <Compile Include="WMI_Property.cs" />
+    <Compile Include="WMI.cs" />
+    <Compile Include="WMI_NamespacesLoader.cs" />
     <EmbeddedResource Include="MainForm.resx">
       <DependentUpon>MainForm.cs</DependentUpon>
     </EmbeddedResource>
@@ -84,7 +83,7 @@
       <DependentUpon>Settings.settings</DependentUpon>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
-    <EmbeddedResource Include="WMI_Classes.xsd">
+    <EmbeddedResource Include="WMI_Namespaces.xsd">
       <SubType>Designer</SubType>
     </EmbeddedResource>
   </ItemGroup>
@@ -92,7 +91,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="WMI_Classes.xml" />
+    <EmbeddedResource Include="WMI_Namespaces.xml" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Icon.ico" />

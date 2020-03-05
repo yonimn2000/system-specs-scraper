@@ -13,22 +13,23 @@ namespace YonatanMankovich.SystemSpecsScraper
 {
     public partial class MainForm : Form
     {
-        readonly IList<WMI_Class> WMI_Classes;
+        readonly IList<WMI.Namespace> WMI_Namespaces;
         readonly string DOMAIN = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().DomainName;
         readonly DataTable specsTable = new DataTable();
 
         private void InitializespecsTableColumns()
         {
             specsTable.Columns.Add("Host", typeof(string));
-            foreach (WMI_Class wmiOBJ in WMI_Classes)
-                foreach (WMI_Property property in wmiOBJ.Properties)
-                    specsTable.Columns.Add(property.DisplayName, typeof(string));
+            foreach (WMI.Namespace WMI_Namespace in WMI_Namespaces)
+                foreach (WMI.Class WMI_Class in WMI_Namespace.Classes)
+                    foreach (WMI.Property property in WMI_Class.Properties)
+                        specsTable.Columns.Add(property.DisplayName, typeof(string));
         }
 
         public MainForm()
         {
             InitializeComponent();
-            WMI_Classes = WMI_ClassesLoader.Load();
+            WMI_Namespaces = WMI_NamespacesLoader.Load();
             InitializespecsTableColumns();
         }
 
@@ -101,13 +102,15 @@ namespace YonatanMankovich.SystemSpecsScraper
                 DataRow row = specsTable.NewRow();
                 try
                 {
-                    foreach (WMI_Class wmiClass in WMI_Classes)
-                    {
-                        ManagementObjectSearcher searcher = new ManagementObjectSearcher("\\\\" + computerName + "\\root\\CIMV2", "SELECT * FROM " + wmiClass.Name);
-                        foreach (ManagementObject queryObj in searcher.Get())
-                            foreach (WMI_Property property in wmiClass.Properties)
-                                row[property.DisplayName] = queryObj[property.Name].ToString();
-                    }
+                    foreach (WMI.Namespace WMI_Namespace in WMI_Namespaces)
+                        foreach (WMI.Class WMI_Class in WMI_Namespace.Classes)
+                        {
+                            ManagementObjectSearcher searcher = new ManagementObjectSearcher("\\\\" + computerName + "\\root\\"
+                                + WMI_Namespace.Name, "SELECT * FROM " + WMI_Class.Name);
+                            foreach (ManagementObject queryObj in searcher.Get())
+                                foreach (WMI.Property property in WMI_Class.Properties)
+                                    row[property.DisplayName] = queryObj[property.Name].ToString();
+                        }
                     row["Host"] = computerName;
                     specsTable.Rows.Add(row);
                 }
