@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.DirectoryServices;
 using System.IO;
 using System.Linq;
 using System.Management;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
@@ -13,27 +15,31 @@ namespace YonatanMankovich.SystemSpecsScraper
     {
         readonly IList<WMI_Class> WMI_Classes;
         readonly string DOMAIN = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().DomainName;
+        readonly DataTable specsTable = new DataTable();
 
-        private void InitializeOutputTableColumns()
+        private void InitializespecsTableColumns()
         {
-            OutputTable.Columns.Add("Date", "Date");
-            OutputTable.Columns.Add("Host", "Host");
+            specsTable.Columns.Add("Host", typeof(string));
             foreach (WMI_Class wmiOBJ in WMI_Classes)
                 foreach (WMI_Property property in wmiOBJ.Properties)
-                    OutputTable.Columns.Add(property.DisplayName, property.DisplayName);
+                    specsTable.Columns.Add(property.DisplayName, typeof(string));
         }
 
         public MainForm()
         {
             InitializeComponent();
-            WindowState = FormWindowState.Maximized;
             WMI_Classes = WMI_ClassesLoader.Load();
-            InitializeOutputTableColumns();
+            InitializespecsTableColumns();
         }
 
         private void ReadHostsBTN_Click(object sender, EventArgs e)
         {
-            HostNamesList.Text = string.Join("\n", GetDomainComputers(DOMAIN));
+            string text = ReadHostsBTN.Text;
+            ReadHostsBTN.Enabled = false;
+            ReadHostsBTN.Text = "Reading. Please wait...";
+            HostsTB.Lines = GetDomainComputers(DOMAIN).ToArray();
+            ReadHostsBTN.Enabled = true;
+            ReadHostsBTN.Text = text;
         }
 
         public static List<string> GetDomainComputers(string domain)
@@ -60,34 +66,39 @@ namespace YonatanMankovich.SystemSpecsScraper
 
         private void MainForm_Load(object sender, EventArgs e)
         {
-            ReadHostsBTN.Enabled = !DOMAIN.Equals("");
-            ReadHostsBTN.Text = !DOMAIN.Equals("") ? "Read Host Names From " + DOMAIN + " Domain" : "Not Connected to a Domain";
-        }
-
-        private void GetSpecsBTN_Click(object sender, EventArgs e)
-        {
-            if (!HostNamesList.Text.Equals(""))
+            if (DOMAIN.Equals("")) // If not on a domain...
             {
-                GetSpecsBTN.Enabled = HostNamesList.Enabled = FailedComputersList.Enabled = ClearTableBTN.Enabled = CopyTableBTN.Enabled = ReadHostsBTN.Enabled = ExportTablesBTN.Enabled = false;
-                GetSpecs();
-                MessageBox.Show("Done reading specs!");
-                GetSpecsBTN.Enabled = HostNamesList.Enabled = FailedComputersList.Enabled = ClearTableBTN.Enabled = CopyTableBTN.Enabled = ExportTablesBTN.Enabled = true;
-                ReadHostsBTN.Enabled = !DOMAIN.Equals("");
+                ReadHostsBTN.Enabled = false;
+                ReadHostsBTN.Text = "Not connected to a domain";
             }
             else
-                MessageBox.Show("Please enter host names before reading specs...");
+            {
+                ReadHostsBTN.Enabled = true;
+                ReadHostsBTN.Text = "Read hosts from " + DOMAIN.ToUpper();
+            }
         }
 
-        private void GetSpecs()
+        private void ScrapeBTN_Click(object sender, EventArgs e)
         {
-            MainPB.Value = 0;
-            CleanupHostNamesRTB();
-            string[] computerNames = HostNamesList.Lines;
-            MainPB.Maximum = computerNames.Count();
-            foreach (string computerName in computerNames)
+            if (HostsTB.Text.Equals(""))
+                MessageBox.Show("Please enter host names before reading specs...");
+            else
             {
-                MainPB.PerformStep();
-                DataGridViewRow row = OutputTable.Rows[OutputTable.Rows.Add()];
+                ScrapeBTN.Enabled = HostsTB.Enabled = ReadHostsBTN.Enabled = false;
+                CleanupHostsTB();
+                MainPB.Value = 0;
+                MainPB.Maximum = HostsTB.Lines.Count();
+                ScrapeBW.RunWorkerAsync();
+            }
+        }
+
+        private void ScrapeBW_DoWork(object sender, System.ComponentModel.DoWorkEventArgs doWorkEventArgs)
+        {
+            string[] computerNames = HostsTB.Lines;
+            string log = "";
+            System.Threading.Tasks.Parallel.ForEach(computerNames, (computerName) =>
+            {
+                DataRow row = specsTable.NewRow();
                 try
                 {
                     foreach (WMI_Class wmiClass in WMI_Classes)
@@ -95,74 +106,53 @@ namespace YonatanMankovich.SystemSpecsScraper
                         ManagementObjectSearcher searcher = new ManagementObjectSearcher("\\\\" + computerName + "\\root\\CIMV2", "SELECT * FROM " + wmiClass.Name);
                         foreach (ManagementObject queryObj in searcher.Get())
                             foreach (WMI_Property property in wmiClass.Properties)
-                                row.Cells[property.DisplayName].Value = queryObj[property.Name].ToString();
+                                row[property.DisplayName] = queryObj[property.Name].ToString();
                     }
-                    row.Cells["Date"].Value = DateTime.Now;
-                    row.Cells["Host"].Value = computerName;
+                    row["Host"] = computerName;
+                    specsTable.Rows.Add(row);
                 }
-                catch (Exception e)
+                catch (System.Runtime.InteropServices.COMException e)
                 {
-                    File.AppendAllText("ScrapingLog.log", $"[{computerName}] {e.Message}");
-                    if (!FailedComputersList.Text.Contains(computerName))
-                        FailedComputersList.AppendText(computerName + Environment.NewLine);
+                    log += $"[{DateTime.Now}] {computerName} | {e.Message}";
+                    File.WriteAllText("Failed Hosts.txt", computerName + "\n");
                 }
-                if (row.Cells[0].Value == null)
-                    OutputTable.Rows.RemoveAt(OutputTable.Rows.Count - 1); // Remove empty rows from the table.
-                if (computerName.Length != 0)
-                    HostNamesList.Text = HostNamesList.Text.Replace(computerName, ""); // Remove the computer name from hosts list.
-                HostNamesList.Lines = Regex.Replace(HostNamesList.Text, @"^\s+$[\r\n]*", "", RegexOptions.Multiline)
-                    .Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None); // Remove empty lines
-            }
-        }
-
-        private void CleanupHostNamesRTB()
-        {
-            HostNamesList.Lines = Regex.Replace(HostNamesList.Text, @"^\s+$[\r\n]*", "", RegexOptions.Multiline)
-                .Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None); // Remove empty lines.
-            HostNamesList.Text = HostNamesList.Text.Replace(" ", ""); // Remove unnecessary spaces.
-            HostNamesList.Lines = HostNamesList.Lines.Distinct().ToArray(); // Remove duplicates.
-        }
-
-        private void ExportTableBTN_Click(object sender, EventArgs e)
-        {
-            OutputTable.SelectAll();
-            Clipboard.SetDataObject(OutputTable.GetClipboardContent());
-            MessageBox.Show("Copied to clipboard");
-        }
-
-        private void ClearTableBTN_Click(object sender, EventArgs e)
-        {
-            DialogResult dialogResult = MessageBox.Show("Are you sure you want to clear the table?", "Warning", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-            if (dialogResult == DialogResult.Yes)
-                OutputTable.Rows.Clear();
-            ClearTableBTN.Enabled = CopyTableBTN.Enabled = ExportTablesBTN.Enabled = false;
-        }
-
-        private void ExportTablesBTN_Click(object sender, EventArgs e)
-        {
-            if (File.Exists("Specs.txt") || File.Exists("Failed Computers.txt"))
+                Invoke(new MethodInvoker(() =>
+                {
+                    MainPB.PerformStep();
+                    HostsTB.Text = HostsTB.Text.Replace(computerName, ""); // Remove the computer name from hosts list.
+                    CleanupHostsTB();
+                }));
+            });
+            File.AppendAllText("ScrapingLog.log", log + $"[{DateTime.Now}] Finished\n\n");
+            ExportTables();
+            Invoke(new MethodInvoker(() =>
             {
-                DialogResult dialogResult = MessageBox.Show("Do you want to overwrite these files?", "These files already exist...", MessageBoxButtons.YesNo);
-                if (dialogResult == DialogResult.Yes)
-                    ExportTables();
-            }
-            else
-                ExportTables();
+                ScrapeBTN.Enabled = HostsTB.Enabled = true;
+                ReadHostsBTN.Enabled = !DOMAIN.Equals("");
+            }));
+        }
+
+        private void CleanupHostsTB()
+        {
+            HostsTB.Lines = Regex.Replace(HostsTB.Text, @"^\s+$[\r\n]*", "", RegexOptions.Multiline)
+                .Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None); // Remove empty lines.
+            HostsTB.Text = HostsTB.Text.Replace(" ", ""); // Remove unnecessary spaces.
+            HostsTB.Lines = HostsTB.Lines.Distinct().ToArray(); // Remove duplicates.
         }
 
         private void ExportTables()
         {
-            if (FailedComputersList.Text.Length > 0)
-                File.WriteAllLines("Failed Computers.txt", FailedComputersList.Lines);
-            OutputTable.SelectAll();
-            File.WriteAllText("Specs.csv", OutputTable.GetClipboardContent().GetText().Replace('\t', ','));
-            MessageBox.Show("System specs table and/or failed computers list were saved to " + Environment.CurrentDirectory, "Export Successful");
-        }
-
-        private void OutputTable_RowsAdded(object sender, DataGridViewRowsAddedEventArgs e)
-        {
-            if (OutputTable.Rows.Count > 0)
-                ClearTableBTN.Enabled = CopyTableBTN.Enabled = ExportTablesBTN.Enabled = true;
+            StringBuilder stringBuilder = new StringBuilder();
+            IEnumerable<string> columnNames = specsTable.Columns.Cast<DataColumn>().Select(column => column.ColumnName);
+            stringBuilder.AppendLine(string.Join(",", columnNames));
+            foreach (DataRow row in specsTable.Rows)
+            {
+                IEnumerable<string> fields = row.ItemArray.Select(field => field.ToString());
+                stringBuilder.AppendLine(string.Join(",", fields));
+            }
+            string path = DateTime.Now.ToString("s").Replace(':', '-') + " Specs.csv";
+            File.WriteAllText(path, stringBuilder.ToString());
+            System.Diagnostics.Process.Start(path);
         }
     }
 }
