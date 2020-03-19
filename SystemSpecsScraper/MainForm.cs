@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace YonatanMankovich.SystemSpecsScraper
@@ -15,7 +16,7 @@ namespace YonatanMankovich.SystemSpecsScraper
         readonly string DOMAIN = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().DomainName;
         const string SPECS_PATH = "Specs.csv"; // Output file path
         const string FAILED_PATH = "FailedHosts.txt";
-
+        // HACK: Separate Core and UI
         public MainForm()
         {
             InitializeComponent();
@@ -24,8 +25,8 @@ namespace YonatanMankovich.SystemSpecsScraper
         private void ScrapeDomainHostsBTN_Click(object sender, EventArgs e)
         {
             string text = ScrapeDomainHostsBTN.Text;
-            ScrapeDomainHostsBTN.Enabled = false;
             ScrapeDomainHostsBTN.Text = "Reading. Please wait...";
+            ScrapeDomainHostsBTN.Enabled = false;
             HostsTB.Lines = GetDomainComputers(DOMAIN).ToArray();
             ScrapeDomainHostsBTN.Enabled = true;
             ScrapeDomainHostsBTN.Text = text;
@@ -75,7 +76,18 @@ namespace YonatanMankovich.SystemSpecsScraper
                 MessageBox.Show("Please enter host names before reading specs...");
             else
             {
-                ScrapeBTN.Enabled = ScrapeFailedBTN.Enabled = HostsTB.Enabled = ScrapeDomainHostsBTN.Enabled = false;
+                WMI_Namespaces = WMI_NamespacesLoader.Load();
+                if (File.Exists(SPECS_PATH) && !File.ReadLines(SPECS_PATH).First().Equals(GetTableHeadersAsCSV())) // If CVS headers deffer...
+                {
+                    string renameTo = File.GetLastWriteTime(SPECS_PATH).ToString("yyyyMMdd-HHmmss") + " " + SPECS_PATH;
+                    File.Move(SPECS_PATH, renameTo);
+                    MessageBox.Show("Looks like table headers were added or removed since scraping specs last time. " +
+                        "The program will rename the old CSV file to '" + renameTo + "' and create a new one.");
+                }
+                if (!File.Exists(SPECS_PATH))
+                    File.WriteAllText(SPECS_PATH, GetTableHeadersAsCSV() + '\n');
+                HostsTB.ReadOnly = true;
+                ScrapeBTN.Enabled = ScrapeFailedBTN.Enabled = ScrapeDomainHostsBTN.Enabled = false;
                 CleanupHostsTB();
                 MainPB.Value = 0;
                 MainPB.Maximum = HostsTB.Lines.Count();
@@ -85,47 +97,64 @@ namespace YonatanMankovich.SystemSpecsScraper
 
         private void ScrapeBW_DoWork(object sender, System.ComponentModel.DoWorkEventArgs doWorkEventArgs)
         {
-            WMI_Namespaces = WMI_NamespacesLoader.Load();
-            if (!File.Exists(SPECS_PATH))
-                File.WriteAllText(SPECS_PATH, GetTableHeadersAsCSV() + '\n');
             string[] computerNames = HostsTB.Lines;
             object fileWriteLock = new object();
-            System.Threading.Tasks.Parallel.ForEach(computerNames, (computerName) =>
+            List<Task> TaskList = new List<Task>();
+            foreach (string computerName in computerNames)
             {
-                try
+                Task newTask = new Task(() =>
                 {
-                    string row = "\"" + computerName;
-                    foreach (WMI.Namespace WMI_Namespace in WMI_Namespaces)
-                        foreach (WMI.Class WMI_Class in WMI_Namespace.Classes)
-                        {
-                            ManagementObjectSearcher searcher = new ManagementObjectSearcher("\\\\" + computerName + "\\root\\"
-                                + WMI_Namespace.Name, "SELECT * FROM " + WMI_Class.Name);
-                            foreach (ManagementObject queryObj in searcher.Get())
-                                foreach (WMI.Property property in WMI_Class.Properties)
-                                    row += "\",\"" + queryObj[property.Name].ToString();
-                        }
-                    lock (fileWriteLock)
-                        File.AppendAllText(SPECS_PATH, row + "\",\"" + DateTime.Now.ToString("s").Replace('T', ' ') + "\"\n");
-                }
-                catch (System.Runtime.InteropServices.COMException)
-                {
-                    lock (fileWriteLock)
-                        File.AppendAllText(FAILED_PATH, computerName + "\n");
-                }
-                Invoke(new MethodInvoker(() =>
-                {
-                    MainPB.PerformStep();
-                    HostsTB.Text = RemoveFirst(HostsTB.Text, computerName); // Remove the computer name from hosts list.
-                    CleanupHostsTB();
-                    HostsLBL.Text = $"Hosts (one per line) [{computerNames.Length - HostsTB.Lines.Length}/{computerNames.Length}]";
-                }));
-            });
+                    try
+                    {
+                        string row = "\"" + computerName;
+                        foreach (WMI.Namespace WMI_Namespace in WMI_Namespaces)
+                            foreach (WMI.Class WMI_Class in WMI_Namespace.Classes)
+                            {
+                                ManagementObjectSearcher searcher = new ManagementObjectSearcher("\\\\" + computerName + "\\root\\"
+                                    + WMI_Namespace.Name, "SELECT * FROM " + WMI_Class.Name);
+                                foreach (ManagementObject queryObj in searcher.Get())
+                                    foreach (WMI.Property property in WMI_Class.Properties)
+                                    {
+                                        row += "\",\"";
+                                        try { row += queryObj[property.Name].ToString(); }
+                                        catch (NullReferenceException) { } // Some properties return null value.
+                                    }
+                            }
+                        lock (fileWriteLock)
+                            File.AppendAllText(SPECS_PATH, row + "\",\"" + DateTime.Now.ToString("s").Replace('T', ' ') + "\"\n");
+                    }
+                    catch (Exception e) when (e is System.Runtime.InteropServices.COMException  // Host offline
+                                           || e is UnauthorizedAccessException                  // Access denied
+                                           || e is ManagementException)                         // Access denied
+                    {
+                        lock (fileWriteLock)
+                            File.AppendAllText(FAILED_PATH, computerName + "\n");
+                    }
+                    Invoke(new MethodInvoker(() =>
+                    {
+                        MainPB.PerformStep();
+                        HostsTB.Text = RemoveFirst(HostsTB.Text, computerName); // Remove the computer name from hosts list.
+                        CleanupHostsTB();
+                        HostsLBL.Text = $"Hosts (one per line) [{computerNames.Length - HostsTB.Lines.Length}/{computerNames.Length}]";
+                    }));
+                });
+                newTask.Start();
+                TaskList.Add(newTask);
+            }
+            Task.WaitAll(TaskList.ToArray());
             Invoke(new MethodInvoker(() =>
             {
-                ScrapeBTN.Enabled = ScrapeFailedBTN.Enabled = HostsTB.Enabled = true;
+                HostsTB.ReadOnly = false;
+                ScrapeBTN.Enabled = ScrapeFailedBTN.Enabled = true;
                 ScrapeDomainHostsBTN.Enabled = !DOMAIN.Equals("");
             }));
-            System.Diagnostics.Process.Start(SPECS_PATH);
+            if (File.ReadAllLines(SPECS_PATH).Length == 1)
+            {
+                File.Delete(SPECS_PATH);
+                MessageBox.Show("Scraping failed.");
+            }
+            else
+                System.Diagnostics.Process.Start(SPECS_PATH);
         }
 
         private string GetTableHeadersAsCSV()
