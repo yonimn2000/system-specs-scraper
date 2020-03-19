@@ -13,6 +13,8 @@ For this program to work, WMI connections need to be allowed on remote computers
 
 After opening the program, a file named `WMI_Namespaces.xml` will be generated in the executable folder. Edit the file with your desired WMI namespaces, classes, and properties. The value of the  `displayName` attribute of the properties is the header of the column in the output CSV file.
 
+A tool by Microsoft can be used to find the available WMI namespaces, classes, and properties. The tool also allows checking what a specific WMI property would return. The tool can be downloaded [here](https://www.microsoft.com/en-us/download/details.aspx?id=8572).
+
 ### Example of `WMI_Namespaces.xml`
 
 ```xml
