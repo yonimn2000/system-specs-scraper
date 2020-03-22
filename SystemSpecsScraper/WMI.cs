@@ -2,9 +2,9 @@
 
 namespace YonatanMankovich.SystemSpecsScraper
 {
-    internal static class WMI
+    public static class WMI
     {
-        internal class Namespace
+        public class Namespace
         {
             public string Name { get; set; }
             public IList<Class> Classes { get; } = new List<Class>();
@@ -15,7 +15,7 @@ namespace YonatanMankovich.SystemSpecsScraper
             }
         }
 
-        internal class Class
+        public class Class
         {
             public string Name { get; set; }
             public IList<Property> Properties { get; } = new List<Property>();
@@ -26,7 +26,7 @@ namespace YonatanMankovich.SystemSpecsScraper
             }
         }
 
-        internal class Property
+        public class Property
         {
             public string Name { get; set; }
 

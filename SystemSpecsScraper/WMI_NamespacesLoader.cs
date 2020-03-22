@@ -6,20 +6,20 @@ using System.Xml.Schema;
 
 namespace YonatanMankovich.SystemSpecsScraper
 {
-    static class WMI_NamespacesLoader
+    public static class WMI_NamespacesLoader
     {
-        public static string Path { get; set; } = "WMI_Namespaces.xml";
+        public static string NamespacesPath { get; set; } = "WMI_Namespaces.xml";
 
         public static IList<WMI.Namespace> Load()
         {
-            RebuildDefaultBoardOptionsFileIfDoesNotExist();
+            RebuildDefaultNamespacesFileIfDoesNotExist();
 
             XmlDocument XML_Doc = new XmlDocument();
             // Read from the embedded XML Schema resource file.
             Stream schemaStream = Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream(typeof(WMI_NamespacesLoader).Namespace + ".WMI_Namespaces.xsd");
             XML_Doc.Schemas.Add(XmlSchema.Read(schemaStream, null));
-            XML_Doc.Load(Path);
+            XML_Doc.Load(NamespacesPath);
             // Validate according to the schema file.
             XML_Doc.Validate(null);
 
@@ -40,15 +40,15 @@ namespace YonatanMankovich.SystemSpecsScraper
             return WMI_Namespaces;
         }
 
-        public static void RebuildDefaultBoardOptionsFileIfDoesNotExist()
+        public static void RebuildDefaultNamespacesFileIfDoesNotExist()
         {
-            if (!File.Exists(Path))
+            if (!File.Exists(NamespacesPath))
             {
                 // Read from the embedded resource file.
                 Assembly.GetExecutingAssembly().GetManifestResourceNames();
                 Stream stream = Assembly.GetExecutingAssembly()
                     .GetManifestResourceStream(typeof(WMI_NamespacesLoader).Namespace + ".WMI_Namespaces.xml");
-                FileStream fileStream = File.Create(Path);
+                FileStream fileStream = File.Create(NamespacesPath);
                 stream.Seek(0, SeekOrigin.Begin);
                 stream.CopyTo(fileStream);
                 fileStream.Close();
