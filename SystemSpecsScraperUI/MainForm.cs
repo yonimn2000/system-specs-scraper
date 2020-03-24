@@ -22,19 +22,7 @@ namespace YonatanMankovich.SystemSpecsScraper
             InitializeComponent();
             DomainHostsRB.Enabled = DomainMethods.IsOnDomain();
             FailedHostsRB.Enabled = File.Exists(FAILED_PATH);
-
-            Scraper.StartedScrapingHostAction = OnStartedScrapingHost;
             Scraper.UpdateHostStatusAction = OnUpdateHostStatus;
-        }
-
-        private void OnStartedScrapingHost(string host)
-        {
-            BeginInvoke(new MethodInvoker(() =>
-            {
-                int currentRowIndex = ScrapedDGV.Rows.Add(host, "Pending");
-                HostRowIndexes.Add(host, currentRowIndex);
-                ScrapedDGV.Rows[currentRowIndex].Cells["Status"].Style.BackColor = Color.Yellow;
-            }));
         }
 
         private void OnUpdateHostStatus(int totalItems, string host, string status)
@@ -42,11 +30,26 @@ namespace YonatanMankovich.SystemSpecsScraper
             BeginInvoke(new MethodInvoker(() =>
             {
                 MainPB.Maximum = totalItems;
-                MainPB.PerformStep();
+                if (status.Equals("Queued"))
+                {
+                    int currentRowIndex = ScrapedDGV.Rows.Add(host, status);
+                    HostRowIndexes.Add(host, currentRowIndex);
+                    ScrapedDGV.Rows[currentRowIndex].Cells["Status"].Style.BackColor = Color.Gray;
+                }
+                else
+                {
+                    if(!status.Equals("Started"))
+                        MainPB.PerformStep();
+                    DataGridViewRow hostRow = ScrapedDGV.Rows[HostRowIndexes[host]];
+                    hostRow.Cells["Status"].Value = status;
+                    switch (status)
+                    {
+                        case "Started": hostRow.Cells["Status"].Style.BackColor = Color.Yellow; break;
+                        case "Success": hostRow.Cells["Status"].Style.BackColor = Color.LimeGreen; break;
+                        default: hostRow.Cells["Status"].Style.BackColor = Color.Red; break;
+                    }
+                }
                 ProgressLBL.Text = $"Finished: {MainPB.Value}/{totalItems} ({Math.Round(100 * (double)MainPB.Value / totalItems)}%)";
-                DataGridViewRow hostRow = ScrapedDGV.Rows[HostRowIndexes[host]];
-                hostRow.Cells["Status"].Style.BackColor = status.Equals("Success") ? Color.LimeGreen : Color.Red;
-                hostRow.Cells["Status"].Value = status;
             }));
         }
 

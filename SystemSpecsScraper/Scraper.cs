@@ -12,7 +12,6 @@ namespace YonatanMankovich.SystemSpecsScraper
         public string SpecsPath { get; set; }
         public string FailedPath { get; set; }
 
-        public Action<string> StartedScrapingHostAction { get; set; }
         public Action<int, string, string> UpdateHostStatusAction { get; set; }
         public Action FinishedScrapingAction { get; set; }
 
@@ -38,9 +37,10 @@ namespace YonatanMankovich.SystemSpecsScraper
             for (int currentComputerIndex = 0; currentComputerIndex < computerNames.Length; currentComputerIndex++)
             {
                 string computerName = computerNames[currentComputerIndex];
+                UpdateHostStatusAction?.Invoke(computerNames.Length, computerName, "Queued");
                 Task newTask = new Task(() =>
                 {
-                    StartedScrapingHostAction?.Invoke(computerName);
+                    UpdateHostStatusAction?.Invoke(computerNames.Length, computerName, "Started");
                     try
                     {
                         string row = "\"" + computerName;
