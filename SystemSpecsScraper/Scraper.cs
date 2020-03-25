@@ -11,8 +11,12 @@ namespace YonatanMankovich.SystemSpecsScraper
     {
         public string SpecsPath { get; set; }
         public string FailedPath { get; set; }
+        public int QueuedHostsCount { get; set; }
+        public int WorkingOnHostsCount { get; set; }
+        public int FailedHostsCount { get; set; }
+        public int SucceededHostsCount { get; set; }
 
-        public Action<int, string, string> UpdateHostStatusAction { get; set; }
+        public Action<string, string> UpdateHostStatusAction { get; set; }
         public Action FinishedScrapingAction { get; set; }
 
         private IList<WMI.Namespace> WMI_Namespaces { get; set; }
@@ -26,6 +30,7 @@ namespace YonatanMankovich.SystemSpecsScraper
 
         public void Scrape(string[] computerNames)
         {
+            QueuedHostsCount = WorkingOnHostsCount = FailedHostsCount = SucceededHostsCount = 0;
             computerNames = computerNames.Distinct().ToArray(); // Remove duplicates.
             WMI_Namespaces = WMI_NamespacesLoader.Load();
             if (File.Exists(SpecsPath) && !File.ReadLines(SpecsPath).First().Equals(GetTableHeadersAsCSV())) // If CVS headers deffer...
@@ -36,11 +41,14 @@ namespace YonatanMankovich.SystemSpecsScraper
             List<Task> TaskList = new List<Task>();
             for (int currentComputerIndex = 0; currentComputerIndex < computerNames.Length; currentComputerIndex++)
             {
+                QueuedHostsCount++;
                 string computerName = computerNames[currentComputerIndex];
-                UpdateHostStatusAction?.Invoke(computerNames.Length, computerName, "Queued");
+                UpdateHostStatusAction?.Invoke(computerName, "Queued");
                 Task newTask = new Task(() =>
                 {
-                    UpdateHostStatusAction?.Invoke(computerNames.Length, computerName, "Started");
+                    WorkingOnHostsCount++;
+                    QueuedHostsCount--;
+                    UpdateHostStatusAction?.Invoke(computerName, "Started");
                     try
                     {
                         string row = "\"" + computerName;
@@ -59,7 +67,9 @@ namespace YonatanMankovich.SystemSpecsScraper
                             }
                         lock (fileWriteLock)
                             File.AppendAllText(SpecsPath, row + "\",\"" + DateTime.Now.ToString("s").Replace('T', ' ') + "\"\n");
-                        UpdateHostStatusAction?.Invoke(computerNames.Length, computerName, "Success");
+                        SucceededHostsCount++;
+                        WorkingOnHostsCount--;
+                        UpdateHostStatusAction?.Invoke(computerName, "Success");
                     }
                     catch (Exception e) when (e is System.Runtime.InteropServices.COMException  // Host offline or does not exist on current network.
                                            || e is UnauthorizedAccessException                  // Access denied
@@ -67,7 +77,9 @@ namespace YonatanMankovich.SystemSpecsScraper
                     {
                         lock (fileWriteLock)
                             File.AppendAllText(FailedPath, computerName + "\n");
-                        UpdateHostStatusAction?.Invoke(computerNames.Length, computerName, e.Message);
+                        FailedHostsCount++;
+                        WorkingOnHostsCount--;
+                        UpdateHostStatusAction?.Invoke(computerName, e.Message);
                     }
                 });
                 newTask.Start();
@@ -92,6 +104,16 @@ namespace YonatanMankovich.SystemSpecsScraper
                     foreach (WMI.Property property in WMI_Class.Properties)
                         output += "\",\"" + property.DisplayName;
             return output + "\",\"DateTime\"";
+        }
+
+        public int GetTotalHostsCount()
+        {
+            return QueuedHostsCount + WorkingOnHostsCount + SucceededHostsCount + FailedHostsCount;
+        }
+
+        public int GetFinishedHostsCount()
+        {
+            return SucceededHostsCount + FailedHostsCount;
         }
     }
 }
