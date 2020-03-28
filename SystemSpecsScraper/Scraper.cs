@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -11,6 +12,7 @@ namespace YonatanMankovich.SystemSpecsScraper
     {
         public string SpecsPath { get; set; }
         public string FailedPath { get; set; }
+
         public int QueuedHostsCount { get; set; }
         public int WorkingOnHostsCount { get; set; }
         public int FailedHostsCount { get; set; }
@@ -20,6 +22,7 @@ namespace YonatanMankovich.SystemSpecsScraper
         public Action FinishedScrapingAction { get; set; }
 
         private IList<WMI.Namespace> WMI_Namespaces { get; set; }
+        private Stopwatch StopWatch { get; } = new Stopwatch();
 
         public Scraper(string specsPath, string failedPath)
         {
@@ -30,6 +33,7 @@ namespace YonatanMankovich.SystemSpecsScraper
 
         public void Scrape(string[] computerNames)
         {
+            StopWatch.Restart();
             QueuedHostsCount = WorkingOnHostsCount = FailedHostsCount = SucceededHostsCount = 0;
             computerNames = computerNames.Distinct().ToArray(); // Remove duplicates.
             WMI_Namespaces = WMI_NamespacesLoader.Load();
@@ -89,6 +93,7 @@ namespace YonatanMankovich.SystemSpecsScraper
             if (File.Exists(FailedPath))
                 File.WriteAllLines(FailedPath, File.ReadAllLines(FailedPath).Distinct());
             FinishedScrapingAction?.Invoke();
+            StopWatch.Stop();
         }
 
         public void ScrapeDomainComputers()
@@ -114,6 +119,18 @@ namespace YonatanMankovich.SystemSpecsScraper
         public int GetFinishedHostsCount()
         {
             return SucceededHostsCount + FailedHostsCount;
+        }
+
+        public TimeSpan GetElapsedTime()
+        {
+            return StopWatch.Elapsed;
+        }
+
+        public TimeSpan GetEstimatedTimeRemaining()
+        {
+            int finishedCount = GetFinishedHostsCount();
+            TimeSpan elapsedTime = GetElapsedTime();
+            return finishedCount == 0 ? TimeSpan.Zero : TimeSpan.FromTicks(elapsedTime.Ticks * GetTotalHostsCount() / finishedCount - elapsedTime.Ticks);
         }
     }
 }
